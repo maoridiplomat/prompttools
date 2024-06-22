@@ -69,9 +69,10 @@ You can also run the notebook in [Google Colab](https://colab.research.google.co
 
 If you want to interact with `prompttools` using our playground interface, you can launch it with the following commands.
 
-First, install prompttools:
+You can run a simple example of a `prompttools` locally with the following
 
 ```
+pip install notebook  # If jupyter notebook has not been installed
 pip install prompttools
 ```
 
@@ -100,7 +101,9 @@ LLMs
 - LLaMA.Cpp (LLaMA 1, LLaMA 2) - **Supported**
 - HuggingFace (Hub API, Inference Endpoints) - **Supported**
 - Anthropic - **Supported**
-- Google PaLM - **Supported**
+- Mistral AI - **Supported**
+- Google Gemini - **Supported**
+- Google PaLM (legacy) - **Supported**
 - Google Vertex AI - **Supported**
 - Azure OpenAI Service - **Supported**
 - Replicate - **Supported**

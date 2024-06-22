@@ -37,12 +37,26 @@ class Logger:
         self.worker_thread.start()
 
     def add_feedback(self, log_id, metric_name, value):
-        self.feedback_queue.put({
-            "log_id": log_id,
-            "key": metric_name,
-            "value": value
-        })
-    
+        self.feedback_queue.put({"log_id": log_id, "key": metric_name, "value": value})
+
+    def add_to_queue(
+        self,
+        hegel_model: str,
+        result: dict,
+        input_parameters: dict,
+        latency: float,
+        log_id: str,
+    ):
+        self.data_queue.put(
+            {
+                "hegel_model": hegel_model,
+                "result": result,
+                "input_parameters": input_parameters,
+                "latency": latency,
+                "log_id": log_id,
+            }
+        )
+
     def execute_and_add_to_queue(self, callable_func, **kwargs):
         if "hegel_model" in kwargs:
             hegel_model = kwargs["hegel_model"]
@@ -53,15 +67,7 @@ class Logger:
         result = callable_func(**kwargs)
         latency = perf_counter() - start
         log_id = str(uuid.uuid4())
-        self.data_queue.put(
-            {
-                "hegel_model": hegel_model,
-                "result": result.model_dump_json(),
-                "input_parameters": json.dumps(kwargs),
-                "latency": latency,
-                "log_id": log_id,
-            }
-        )
+        self.add_to_queue(hegel_model, result.model_dump_json(), json.dumps(kwargs), latency, log_id)
         result.log_id = log_id
         return result
 
@@ -113,13 +119,48 @@ class Logger:
         except requests.exceptions.RequestException as e:
             print(f"Error sending feedback to Flask API: {e}")
 
+
 sender = Logger()
-# Monkey-patching
+
+
+def logging_wrapper(original_fn):
+    def wrapped_function(**kwargs):
+        # Call the original function with the provided arguments
+
+        if "hegel_model" in kwargs:
+            hegel_model = kwargs["hegel_model"]
+            del kwargs["hegel_model"]
+        else:
+            hegel_model = None
+        start = perf_counter()
+        result = original_fn(**kwargs)
+        latency = perf_counter() - start
+        log_id = str(uuid.uuid4())
+        sender.add_to_queue(hegel_model, result.model_dump_json(), json.dumps(kwargs), latency, log_id)
+        result.log_id = log_id
+        return result
+
+    return wrapped_function
+
+
+# Monkey-patching main client
 try:
     openai.chat.completions.create = sender.wrap(openai.chat.completions.create)
 except Exception:
+    print("Error monkey-patching main client")
     print("You may need to add `OPENAI_API_KEY=''` to your `.env` file.")
     raise
+
+# Monkey-patching client instance
+try:
+    # This is working as of openai SDK version 1.11.1
+    openai.resources.chat.completions.Completions.create = logging_wrapper(
+        openai.resources.chat.completions.Completions.create
+    )
+except Exception:
+    print("Error monkey-patch individual client.")
+    raise
+
 
 def add_feedback(*args):
     sender.add_feedback(*args)
